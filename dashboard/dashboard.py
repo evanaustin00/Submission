@@ -11,14 +11,19 @@ st.set_page_config(
 )
 
 # Load dataset
-url_hour = 'https://raw.githubusercontent.com/evanaustin00/bike-sharing-dataset/refs/heads/main/hour.csv'
-url_day = 'https://raw.githubusercontent.com/evanaustin00/bike-sharing-dataset/refs/heads/main/day.csv'
-hour_df = pd.read_csv(url_hour)
-day_df = pd.read_csv(url_day)
+@st.cache_data
+def load_data():
+    url_hour = 'https://raw.githubusercontent.com/evanaustin00/bike-sharing-dataset/refs/heads/main/hour.csv'
+    url_day = 'https://raw.githubusercontent.com/evanaustin00/bike-sharing-dataset/refs/heads/main/day.csv'
+    hour_df = pd.read_csv(url_hour)
+    day_df = pd.read_csv(url_day)
 
-# Konversi kolom 'dteday' menjadi datetime
-day_df['dteday'] = pd.to_datetime(day_df['dteday'])
-hour_df['dteday'] = pd.to_datetime(hour_df['dteday'])
+    # Konversi kolom 'dteday' menjadi datetime
+    day_df['dteday'] = pd.to_datetime(day_df['dteday'])
+    hour_df['dteday'] = pd.to_datetime(hour_df['dteday'])
+    return hour_df, day_df
+
+hour_df, day_df = load_data()
 
 # Tambahkan Judul dan Deskripsi
 st.title("Analisis Data Penyewaan Sepeda")
@@ -39,15 +44,19 @@ with st.sidebar:
         help="Pilih rentang bulan untuk memfilter data."
     )
 
-    # Filter Musim (Season) dengan radio button
-    selected_seasons = st.radio(
+    # Filter Musim (Season) dengan multiselect dan opsi "Semua Musim"
+    all_seasons = day_df['season'].unique().tolist()
+    selected_seasons = st.multiselect(
         "Pilih Musim:",
-        options=day_df['season'].unique(),
-        index=0,
-        horizontal=True,
-        help="Pilih musim untuk memfilter data."
+        options=all_seasons + ["Semua Musim"],
+        default=all_seasons,  # Default: semua musim terpilih
+        help="Pilih musim untuk memfilter data. Pilih 'Semua Musim' untuk melihat data dari semua musim."
     )
 
+    # Jika "Semua Musim" dipilih, gunakan semua musim, jika tidak, gunakan musim yang dipilih
+    if "Semua Musim" in selected_seasons:
+        selected_seasons = all_seasons
+    
     # Filter Kondisi Cuaca (Weathersit) dengan checkbox
     selected_weathersit = st.multiselect(
         "Pilih Kondisi Cuaca:",
@@ -63,7 +72,7 @@ with st.sidebar:
 # Filter dataset berdasarkan pilihan pengguna
 filtered_day_df = day_df[
     (day_df['mnth'] >= selected_months[0]) & (day_df['mnth'] <= selected_months[1]) &
-    (day_df['season'] == selected_seasons) &
+    (day_df['season'].isin(selected_seasons)) &
     (day_df['weathersit'].isin(selected_weathersit))
 ]
 
@@ -74,16 +83,42 @@ col1, col2 = st.columns(2)
 with col1:
     st.header("Pengaruh Kondisi Cuaca Terhadap Jumlah Pengguna Terdaftar")
 
-    # Agregasi data berdasarkan kondisi cuaca
-    aggregated_weather = filtered_day_df.groupby('weathersit')['registered'].sum().reset_index()
+    # Filter data untuk hari kerja di Januari 2011
+    jan_2011_workingday = day_df[
+        (day_df['mnth'] == 1) &
+        (day_df['yr'] == 0) &
+        (day_df['workingday'] == 1)
+    ]
 
-    # Visualisasi Data untuk Pertanyaan 1
+    # Mapping untuk weathersit
+    weather_labels = {
+        1: 'Cerah',
+        2: 'Berkabut',
+        3: 'Hujan Ringan/Salju',
+        4: 'Hujan Lebat/Es'
+    }
+    jan_2011_workingday['weathersit_label'] = jan_2011_workingday['weathersit'].map(weather_labels)
+
+    # Visualisasi: Boxplot pengaruh kondisi cuaca terhadap jumlah pengguna terdaftar
     fig1, ax1 = plt.subplots(figsize=(10, 6))
-    sns.barplot(x='weathersit', y='registered', data=aggregated_weather, palette='viridis', ax=ax1)
-    ax1.set_title('Total Jumlah Pengguna Terdaftar Berdasarkan Kondisi Cuaca')
-    ax1.set_xlabel('Kondisi Cuaca (1: Cerah, 2: Kabut, 3: Hujan/Salju)')
-    ax1.set_ylabel('Total Jumlah Pengguna Terdaftar')
+    sns.boxplot(
+        x='weathersit_label',  # Gunakan label yang lebih deskriptif
+        y='registered',
+        data=jan_2011_workingday,
+        palette='coolwarm',
+        notch=True,
+        ax=ax1
+    )
+    ax1.set_title('Pengaruh Kondisi Cuaca Terhadap Jumlah Pengguna Terdaftar (Januari 2011 - Hari Kerja)')
+    ax1.set_xlabel('Kondisi Cuaca')
+    ax1.set_ylabel('Jumlah Pengguna Terdaftar')
     ax1.grid(axis='y', linestyle='--')
+
+    # Tambahkan anotasi median
+    medians = jan_2011_workingday.groupby('weathersit_label')['registered'].median().values
+    for i, median in enumerate(medians):
+        ax1.text(i, median + 50, f'Median: {int(median)}', ha='center', color='red')
+
     st.pyplot(fig1)
 
 # Pertanyaan 2: Hubungan Antara Kecepatan Angin dan Jumlah Total Pengguna
@@ -91,25 +126,42 @@ with col2:
     st.header("Hubungan Antara Kecepatan Angin dan Jumlah Total Pengguna")
 
     # Filter data untuk akhir pekan di minggu pertama Januari 2011
-    weekend_first_week_jan_2011 = hour_df[
+    weekend_first_week = hour_df[
         (hour_df['dteday'] <= '2011-01-07') &
-        (hour_df['weekday'].isin([0, 6]))
+        (hour_df['weekday'].isin([0, 6]))  # 0 = Minggu, 6 = Sabtu
     ]
 
-    # Scatter plot hubungan kecepatan angin dan jumlah total pengguna
+    # Visualisasi Scatter plot dengan regresi
     fig2, ax2 = plt.subplots(figsize=(10, 6))
-    sns.scatterplot(x='windspeed', y='cnt', data=weekend_first_week_jan_2011, alpha=0.7, color='teal', ax=ax2)
-    ax2.set_title('Hubungan Kecepatan Angin dan Total Jumlah Pengguna')
-    ax2.set_xlabel('Kecepatan Angin')
-    ax2.set_ylabel('Total Jumlah Pengguna')
-    ax2.grid(True, linestyle='--')
+    sns.scatterplot(
+        x='windspeed',
+        y='cnt',
+        data=weekend_first_week,
+        palette='viridis',
+        alpha=0.7,
+        edgecolor='black',
+        ax=ax2
+    )
+    sns.regplot(
+        x='windspeed',
+        y='cnt',
+        data=weekend_first_week,
+        scatter=False,
+        color='red',
+        line_kws={'linestyle': '--', 'alpha': 0.5},
+        ax=ax2
+    )
+    ax2.set_title('Hubungan Kecepatan Angin dan Jumlah Total Pengguna\nAkhir Pekan Minggu Pertama Januari 2011')
+    ax2.set_xlabel('Kecepatan Angin (Normalisasi)')
+    ax2.set_ylabel('Jumlah Total Pengguna')
+    ax2.grid(linestyle='--')
     st.pyplot(fig2)
 
 # Kesimpulan
 st.subheader("Kesimpulan")
 st.markdown("""
 - Kondisi cuaca memiliki pengaruh signifikan terhadap total jumlah pengguna terdaftar pada hari kerja selama bulan Januari 2011. Cuaca yang lebih baik (kondisi 1: Cerah) cenderung memiliki total jumlah pengguna terdaftar yang lebih tinggi dibandingkan dengan cuaca yang kurang baik.
-- Tidak ada hubungan yang kuat antara kecepatan angin dan total jumlah pengguna pada akhir pekan selama minggu pertama Januari 2011.
+- Terdapat hubungan yang lemah antara kecepatan angin dan total jumlah pengguna pada akhir pekan selama minggu pertama Januari 2011.
 - Tren penggunaan sepeda bervariasi berdasarkan musim.
 """)
 
