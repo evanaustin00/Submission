@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 # Konfigurasi halaman
 st.set_page_config(
-    page_title="Analisis Data Penyewaan Sepeda",
+    page_title="Dashboard Interaktif Penyewaan Sepeda",
     page_icon=":bike:",
     layout="wide",
 )
@@ -25,71 +25,48 @@ def load_data():
 
 hour_df, day_df = load_data()
 
-# Tambahkan Judul dan Deskripsi
-st.title("Analisis Data Penyewaan Sepeda")
+# Judul Dashboard
+st.title("Dashboard Interaktif Penyewaan Sepeda")
 st.markdown("""
 Dashboard ini menyajikan analisis data penyewaan sepeda berdasarkan dataset `day` dan `hour`.
-Gunakan filter di sidebar untuk melakukan eksplorasi data lebih lanjut.
+Gunakan filter di bawah untuk melakukan eksplorasi data lebih lanjut.
 """)
 
 # Sidebar untuk Filter Data
-with st.sidebar:
-    st.header("Filter Data")
+st.sidebar.header("Filter Data")
 
-    # Filter Bulan dengan slider range
-    selected_months = st.select_slider(
-        "Pilih Rentang Bulan:",
-        options=day_df['mnth'].unique(),
-        value=(day_df['mnth'].min(), day_df['mnth'].max()),
-        help="Pilih rentang bulan untuk memfilter data."
-    )
+# Filter Musim (Season) untuk Visualisasi 1
+season_labels = {1: "Spring", 2: "Summer", 3: "Fall", 4: "Winter"}
+selected_season_vis1 = st.sidebar.selectbox(
+    "Pilih Musim untuk Visualisasi 1:",
+    options=["All Seasons"] + list(season_labels.keys()),
+    format_func=lambda x: season_labels.get(x, "All Seasons"),
+)
 
-    # Filter Musim (Season) dengan multiselect dan opsi "Semua Musim"
-    all_seasons = day_df['season'].unique().tolist()
-    selected_seasons = st.multiselect(
-        "Pilih Musim:",
-        options=all_seasons + ["Semua Musim"],
-        default=all_seasons,  # Default: semua musim terpilih
-        help="Pilih musim untuk memfilter data. Pilih 'Semua Musim' untuk melihat data dari semua musim."
-    )
+# Filter Hari Kerja (Working Day) untuk Visualisasi 1
+working_day_filter_vis1 = st.sidebar.radio(
+    "Pilih Jenis Hari untuk Visualisasi 1:",
+    options=["Semua Hari", "Hari Kerja", "Akhir Pekan"],
+)
 
-    # Jika "Semua Musim" dipilih, gunakan semua musim, jika tidak, gunakan musim yang dipilih
-    if "Semua Musim" in selected_seasons:
-        selected_seasons = all_seasons
-    
-    # Filter Kondisi Cuaca (Weathersit) dengan checkbox
-    selected_weathersit = st.multiselect(
-        "Pilih Kondisi Cuaca:",
-        options=day_df['weathersit'].unique(),
-        default=day_df['weathersit'].unique(),
-        help="Pilih kondisi cuaca untuk memfilter data."
-    )
+# Terapkan filter ke dataset untuk Visualisasi 1
+filtered_day_df_vis1 = day_df.copy()
 
-    # Deskripsi tambahan
-    st.sidebar.markdown("---")
-    st.sidebar.info("Pilih filter untuk melihat visualisasi yang diperbarui.")
+if selected_season_vis1 != "All Seasons":
+    filtered_day_df_vis1 = filtered_day_df_vis1[filtered_day_df_vis1['season'] == selected_season_vis1]
 
-# Filter dataset berdasarkan pilihan pengguna
-filtered_day_df = day_df[
-    (day_df['mnth'] >= selected_months[0]) & (day_df['mnth'] <= selected_months[1]) &
-    (day_df['season'].isin(selected_seasons)) &
-    (day_df['weathersit'].isin(selected_weathersit))
-]
+if working_day_filter_vis1 == "Hari Kerja":
+    filtered_day_df_vis1 = filtered_day_df_vis1[filtered_day_df_vis1['workingday'] == 1]
+elif working_day_filter_vis1 == "Akhir Pekan":
+    filtered_day_df_vis1 = filtered_day_df_vis1[filtered_day_df_vis1['workingday'] == 0]
 
 # Kolom Layout untuk Visualisasi
 col1, col2 = st.columns(2)
 
-# Pertanyaan 1: Pengaruh Kondisi Cuaca Terhadap Jumlah Pengguna Terdaftar
+# Visualisasi 1: Boxplot Pengaruh Kondisi Cuaca terhadap Jumlah Pengguna Terdaftar
 with col1:
-    st.header("Pengaruh Kondisi Cuaca Terhadap Jumlah Pengguna Terdaftar")
-
-    # Filter data untuk hari kerja di Januari 2011
-    jan_2011_workingday = day_df[
-        (day_df['mnth'] == 1) &
-        (day_df['yr'] == 0) &
-        (day_df['workingday'] == 1)
-    ]
-
+    st.subheader("Pengaruh Kondisi Cuaca Terhadap Jumlah Pengguna Terdaftar")
+    
     # Mapping untuk weathersit
     weather_labels = {
         1: 'Cerah',
@@ -97,78 +74,87 @@ with col1:
         3: 'Hujan Ringan/Salju',
         4: 'Hujan Lebat/Es'
     }
-    jan_2011_workingday['weathersit_label'] = jan_2011_workingday['weathersit'].map(weather_labels)
+    
+    filtered_day_df_vis1['weathersit_label'] = filtered_day_df_vis1['weathersit'].map(weather_labels)
 
-    # Visualisasi: Boxplot pengaruh kondisi cuaca terhadap jumlah pengguna terdaftar
+    # Visualisasi Boxplot
     fig1, ax1 = plt.subplots(figsize=(10, 6))
     sns.boxplot(
-        x='weathersit_label',  # Gunakan label yang lebih deskriptif
-        y='registered',
-        data=jan_2011_workingday,
-        palette='coolwarm',
+        x='weathersit_label', 
+        y='registered', 
+        data=filtered_day_df_vis1, 
+        palette='coolwarm', 
         notch=True,
         ax=ax1
     )
-    ax1.set_title('Pengaruh Kondisi Cuaca Terhadap Jumlah Pengguna Terdaftar (Januari 2011 - Hari Kerja)')
+    
+    ax1.set_title('Pengaruh Kondisi Cuaca Terhadap Jumlah Pengguna Terdaftar')
     ax1.set_xlabel('Kondisi Cuaca')
     ax1.set_ylabel('Jumlah Pengguna Terdaftar')
-    ax1.grid(axis='y', linestyle='--')
-
+    
     # Tambahkan anotasi median
-    medians = jan_2011_workingday.groupby('weathersit_label')['registered'].median().values
+    medians = filtered_day_df_vis1.groupby('weathersit_label')['registered'].median().values
     for i, median in enumerate(medians):
         ax1.text(i, median + 50, f'Median: {int(median)}', ha='center', color='red')
 
     st.pyplot(fig1)
 
-# Pertanyaan 2: Hubungan Antara Kecepatan Angin dan Jumlah Total Pengguna
+# Sidebar untuk Filter Data Visualisasi Kedua
+st.sidebar.header("Filter Data untuk Visualisasi Kedua")
+
+# Filter Musim (Season) untuk Visualisasi 2
+selected_season_vis2 = st.sidebar.selectbox(
+    "Pilih Musim untuk Visualisasi 2:",
+    options=["All Seasons"] + list(season_labels.keys()),
+    format_func=lambda x: season_labels.get(x, "All Seasons"),
+)
+
+# Filter Hari Kerja (Working Day) untuk Visualisasi 2
+working_day_filter_vis2 = st.sidebar.radio(
+    "Pilih Jenis Hari untuk Visualisasi 2:",
+    options=["Semua Hari", "Hari Kerja", "Akhir Pekan"],
+)
+
+# Terapkan filter ke dataset untuk Visualisasi 2
+filtered_hour_df_vis2 = hour_df.copy()
+
+if selected_season_vis2 != "All Seasons":
+    filtered_hour_df_vis2 = filtered_hour_df_vis2[filtered_hour_df_vis2['season'] == selected_season_vis2]
+
+if working_day_filter_vis2 == "Hari Kerja":
+    filtered_hour_df_vis2 = filtered_hour_df_vis2[filtered_hour_df_vis2['weekday'] < 5]  # weekday < 5 berarti Senin-Jumat
+elif working_day_filter_vis2 == "Akhir Pekan":
+    filtered_hour_df_vis2 = filtered_hour_df_vis2[filtered_hour_df_vis2['weekday'] >= 5]  # weekday >= 5 berarti Sabtu-Minggu
+# Visualisasi 2: Scatter Plot Hubungan Kecepatan Angin dan Jumlah Total Pengguna
 with col2:
-    st.header("Hubungan Antara Kecepatan Angin dan Jumlah Total Pengguna")
+    st.subheader("Hubungan Kecepatan Angin dan Jumlah Total Pengguna")
 
-    # Filter data untuk akhir pekan di minggu pertama Januari 2011
-    weekend_first_week = hour_df[
-        (hour_df['dteday'] <= '2011-01-07') &
-        (hour_df['weekday'].isin([0, 6]))  # 0 = Minggu, 6 = Sabtu
-    ]
-
-    # Visualisasi Scatter plot dengan regresi
-    fig2, ax2 = plt.subplots(figsize=(10, 6))
+    # Scatter plot dengan regresi dan kategori kecepatan angin
+    fig2, ax2 = plt.subplots(figsize=(12, 6))
+    
     sns.scatterplot(
-        x='windspeed',
-        y='cnt',
-        data=weekend_first_week,
-        palette='viridis',
+        x='windspeed', 
+        y='cnt', 
+        data=filtered_hour_df_vis2, 
         alpha=0.7,
         edgecolor='black',
-        ax=ax2
+        ax=ax2,
     )
+    
     sns.regplot(
-        x='windspeed',
-        y='cnt',
-        data=weekend_first_week,
-        scatter=False,
+        x='windspeed', 
+        y='cnt', 
+        data=filtered_hour_df_vis2, 
+        scatter=False, 
         color='red',
         line_kws={'linestyle': '--', 'alpha': 0.5},
-        ax=ax2
+        ax=ax2,
     )
-    ax2.set_title('Hubungan Kecepatan Angin dan Jumlah Total Pengguna\nAkhir Pekan Minggu Pertama Januari 2011')
+    
+    ax2.set_title(f'Hubungan Kecepatan Angin dan Jumlah Total Pengguna\nMusim: {season_labels.get(selected_season_vis2, "All Seasons")}')
     ax2.set_xlabel('Kecepatan Angin (Normalisasi)')
     ax2.set_ylabel('Jumlah Total Pengguna')
+    
     ax2.grid(linestyle='--')
+    
     st.pyplot(fig2)
-
-# Kesimpulan
-st.subheader("Kesimpulan")
-st.markdown("""
-- Kondisi cuaca memiliki pengaruh signifikan terhadap total jumlah pengguna terdaftar pada hari kerja selama bulan Januari 2011. Cuaca yang lebih baik (kondisi 1: Cerah) cenderung memiliki total jumlah pengguna terdaftar yang lebih tinggi dibandingkan dengan cuaca yang kurang baik.
-- Terdapat hubungan yang lemah antara kecepatan angin dan total jumlah pengguna pada akhir pekan selama minggu pertama Januari 2011.
-- Tren penggunaan sepeda bervariasi berdasarkan musim.
-""")
-
-# Tampilan Data yang telah difilter
-st.subheader("Data yang Difilter")
-st.dataframe(filtered_day_df.head())
-
-# Tambahkan Footer
-st.markdown("---")
-st.markdown("Dibuat dengan Streamlit")
